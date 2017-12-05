@@ -4,8 +4,19 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 provider "aws" {
-  region = "ap-south-1"
+  region = "us-east-1"
 }
+
+data "aws_caller_identity" "iamuser" {}
+
+data "aws_region" "region" {
+  current = true
+}
+
+data "aws_subnet" "selected" {
+  tags =  {Name = "br_gtosbx_npd_us_east_1b_dmz_sbt"}
+}
+
 
 # ------------------------------------------------------------------------------
 # CONFIGURE OUR AWS STACK
@@ -13,9 +24,11 @@ provider "aws" {
 
 resource "aws_opsworks_stack" "test-stack" {
   name                          = "awesome-stack"
-  region                        = "ap-south-1"
+  region                        = "${data.aws_region.region.name}"
+  vpc_id                        = "${data.aws_subnet.selected.vpc_id}"
+  default_subnet_id             = "${data.aws_subnet.selected.id}"
   default_os                    = "Amazon Linux 2017.09"
-  default_ssh_key_name          = "TerraformDemo"
+  default_ssh_key_name          = "sandbox_inn_lab-Barath"
   configuration_manager_name    = "Chef"
   configuration_manager_version = "11.10"
 
@@ -27,9 +40,9 @@ resource "aws_opsworks_stack" "test-stack" {
 
   manage_berkshelf              = false
 
-  service_role_arn              = "arn:aws:iam::771987116335:role/aws-opsworks-service-role"
-  default_instance_profile_arn  = "arn:aws:iam::771987116335:instance-profile/aws-opsworks-ec2-role"
-  default_availability_zone     = "ap-south-1a"
+  service_role_arn              = "arn:aws:iam::${data.aws_caller_identity.iamuser.account_id}:role/aws-opsworks-service-role"
+  default_instance_profile_arn  = "arn:aws:iam::${data.aws_caller_identity.iamuser.account_id}:instance-profile/aws-opsworks-ec2-role"
+  default_availability_zone     = "${data.aws_subnet.selected.availability_zone}"
 
    
 
@@ -62,11 +75,11 @@ resource "aws_opsworks_custom_layer" "custlayer" {
 
 resource "aws_opsworks_instance" "cluster01-1" {
     count                       = 1
-    availability_zone           = "ap-south-1a"
+    availability_zone           = "${data.aws_subnet.selected.availability_zone}"
     stack_id                    = "${aws_opsworks_stack.test-stack.id}"
     layer_ids                   = ["${aws_opsworks_custom_layer.custlayer.id}"]
     os                          = "Amazon Linux 2017.09"
-    instance_type               = "t2.micro"
+    instance_type               = "t2.medium"
     state                       = "running"
     root_device_type            = "ebs"
 }
@@ -76,6 +89,7 @@ resource "aws_opsworks_permission" "stack_permission" {
   allow_sudo = true
   # level      = "manage"
   # "arn:aws:iam::771987116335:user/awsdemo"
-  user_arn   = "arn:aws:iam::771987116335:user/awsdemo"
+  user_arn   = "arn:aws:sts::${data.aws_caller_identity.iamuser.account_id}:assumed-role/ADFS-BR_GTO_Sandbox_Developer_User_Role/RavichanderB@bsg.ad.adp.com"
   stack_id   = "${aws_opsworks_stack.test-stack.id}"
 }
+
